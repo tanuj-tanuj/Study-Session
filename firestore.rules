@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Users Collection ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.joinedAt is string;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if false; // Users shouldn't be listable for privacy
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && (incoming().keys().hasAll(['uid', 'displayName', 'email', 'joinedAt']) && incoming().keys().size() <= 6);
+      allow update: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'college', 'photoURL']));
+    }
+
+    // --- Rooms Collection ---
+    function isValidRoom(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.subject is string && data.subject.size() <= 100 &&
+             data.creatorId == request.auth.uid &&
+             data.status in ['active', 'closed'] &&
+             data.createdAt is string;
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isSignedIn(); // Any student can see study rooms
+      allow create: if isSignedIn() && isEmailVerified() && isValidRoom(incoming()) && 
+                    incoming().keys().hasAll(['title', 'subject', 'creatorId', 'createdAt', 'status']) &&
+                    incoming().keys().size() <= 10;
+      
+      allow update: if isSignedIn() && (
+        // Action: Join (increment participantCount)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['participantCount']) && incoming().participantCount == existing().participantCount + 1) ||
+        // Action: Close/Edit (Owner only)
+        (isOwner(existing().creatorId) && isValidRoom(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'subject', 'status', 'meetLink']))
+      );
+      
+      allow delete: if false; // Rooms should be closed, not deleted, for history/metrics
+
+      // --- Messages Subcollection ---
+      match /messages/{messageId} {
+        function isValidMessage(data) {
+          return data.roomId == roomId &&
+                 data.senderId == request.auth.uid &&
+                 data.content is string && data.content.size() <= 1000 &&
+                 data.timestamp is string;
+        }
+
+        // Only allow reading and writing if the parent room exists and is active
+        allow list: if isSignedIn();
+        allow create: if isSignedIn() && isEmailVerified() && isValidMessage(incoming()) &&
+                      get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'active';
+      }
+    }
+  }
+}

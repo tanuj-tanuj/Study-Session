@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "college": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "email", "joinedAt"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Virtual study room session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "closed"] },
+        "meetLink": { "type": "string" },
+        "participantCount": { "type": "number" }
+      },
+      "required": ["title", "subject", "creatorId", "createdAt", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message in a study room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomId", "senderId", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Study rooms"
+    },
+    "rooms/{roomId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages within a room"
+    }
+  }
+}
