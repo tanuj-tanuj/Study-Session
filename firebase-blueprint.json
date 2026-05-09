@@ -28,7 +28,9 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["active", "closed"] },
         "meetLink": { "type": "string" },
-        "participantCount": { "type": "number" }
+        "participantCount": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "enableChat": { "type": "boolean" }
       },
       "required": ["title", "subject", "creatorId", "createdAt", "status"]
     },
@@ -45,12 +47,71 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["roomId", "senderId", "content", "timestamp"]
+    },
+    "Participation": {
+      "title": "Participation",
+      "description": "Record of a user joining a study room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomId": { "type": "string" },
+        "roomTitle": { "type": "string" },
+        "roomSubject": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["roomId", "roomTitle", "roomSubject", "joinedAt"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "Collaborative study note",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "authorId", "createdAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Private message thread between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "participantNames": { "type": "object" },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants", "updatedAt"]
+    },
+    "DirectMessage": {
+      "title": "DirectMessage",
+      "description": "Private message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "content", "timestamp"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "User",
       "description": "User profiles"
+    },
+    "users/{userId}/participation/{participationId}": {
+      "schema": "Participation",
+      "description": "User's study session history"
+    },
+    "users/{userId}/reminders/{reminderId}": {
+      "schema": "object",
+      "description": "Scheduled session reminders"
     },
     "rooms/{roomId}": {
       "schema": "Room",
@@ -59,6 +120,22 @@
     "rooms/{roomId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Chat messages within a room"
+    },
+    "rooms/{roomId}/resources/{resourceId}": {
+      "schema": "object",
+      "description": "Shared study materials and links"
+    },
+    "rooms/{roomId}/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Shared room notes"
+    },
+    "conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Direct message threads"
+    },
+    "conversations/{conversationId}/messages/{messageId}": {
+      "schema": "DirectMessage",
+      "description": "Individual direct messages"
     }
   }
 }

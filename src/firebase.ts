@@ -7,12 +7,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 export { onAuthStateChanged };
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp, Timestamp, getDocFromServer } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const storage = getStorage(app);
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
@@ -106,6 +108,8 @@ export interface StudyRoom {
   status: 'active' | 'closed';
   meetLink?: string;
   participantCount: number;
+  durationMinutes?: number;
+  enableChat?: boolean;
 }
 
 export interface ChatMessage {
@@ -115,6 +119,9 @@ export interface ChatMessage {
   senderName: string;
   content: string;
   timestamp: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
 }
 
 export interface UserProfile {
@@ -124,4 +131,36 @@ export interface UserProfile {
   photoURL?: string;
   college?: string;
   joinedAt: string;
+}
+
+export interface Participation {
+  id: string;
+  roomId: string;
+  roomTitle: string;
+  roomSubject: string;
+  joinedAt: string;
+}
+
+export interface Resource {
+  id: string;
+  roomId: string;
+  title: string;
+  url: string;
+  addedBy: string;
+  addedByName: string;
+}
+
+export interface Conversation {
+  id: string;
+  participants: string[];
+  participantNames: { [uid: string]: string };
+  lastMessage: string;
+  updatedAt: string;
+}
+
+export interface DirectMessage {
+  id: string;
+  senderId: string;
+  content: string;
+  timestamp: string;
 }

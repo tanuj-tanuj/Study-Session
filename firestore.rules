@@ -44,6 +44,31 @@ service cloud.firestore {
       allow list: if false; // Users shouldn't be listable for privacy
       allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && (incoming().keys().hasAll(['uid', 'displayName', 'email', 'joinedAt']) && incoming().keys().size() <= 6);
       allow update: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'college', 'photoURL']));
+
+      // --- Participation History ---
+      match /participation/{participationId} {
+        function isValidParticipation(data) {
+          return data.roomId is string &&
+                 data.roomTitle is string &&
+                 data.roomSubject is string &&
+                 data.joinedAt is string;
+        }
+
+        allow list: if isSignedIn() && isOwner(userId);
+        allow create: if isSignedIn() && isOwner(userId) && isValidParticipation(incoming());
+      }
+
+      // --- Reminders ---
+      match /reminders/{reminderId} {
+        function isValidReminder(data) {
+          return data.roomId is string &&
+                 data.roomTitle is string &&
+                 data.time is string &&
+                 data.createdAt is string;
+        }
+
+        allow read, write: if isSignedIn() && isOwner(userId) && (request.method != 'create' || isValidReminder(incoming()));
+      }
     }
 
     // --- Rooms Collection ---
@@ -52,20 +77,26 @@ service cloud.firestore {
              data.subject is string && data.subject.size() <= 100 &&
              data.creatorId == request.auth.uid &&
              data.status in ['active', 'closed'] &&
-             data.createdAt is string;
+             data.createdAt is string &&
+             (!('durationMinutes' in data) || (data.durationMinutes is number && data.durationMinutes >= 0)) &&
+             (!('enableChat' in data) || data.enableChat is bool);
     }
 
     match /rooms/{roomId} {
       allow read: if isSignedIn(); // Any student can see study rooms
       allow create: if isSignedIn() && isEmailVerified() && isValidRoom(incoming()) && 
                     incoming().keys().hasAll(['title', 'subject', 'creatorId', 'createdAt', 'status']) &&
-                    incoming().keys().size() <= 10;
+                    incoming().keys().size() <= 15;
       
       allow update: if isSignedIn() && (
         // Action: Join (increment participantCount)
         (incoming().diff(existing()).affectedKeys().hasOnly(['participantCount']) && incoming().participantCount == existing().participantCount + 1) ||
-        // Action: Close/Edit (Owner only)
-        (isOwner(existing().creatorId) && isValidRoom(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'subject', 'status', 'meetLink']))
+        // Action: Leave (decrement participantCount)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['participantCount']) && incoming().participantCount == existing().participantCount - 1) ||
+        // Action: Close/Edit/Extend (Owner only)
+        (isOwner(existing().creatorId) && isValidRoom(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'subject', 'status', 'meetLink', 'durationMinutes', 'enableChat'])) ||
+        // Action: Creator Extend Time
+        (isOwner(existing().creatorId) && incoming().diff(existing()).affectedKeys().hasOnly(['durationMinutes']) && incoming().durationMinutes is number)
       );
       
       allow delete: if false; // Rooms should be closed, not deleted, for history/metrics
@@ -80,9 +111,59 @@ service cloud.firestore {
         }
 
         // Only allow reading and writing if the parent room exists and is active
-        allow list: if isSignedIn();
+        allow read, list: if isSignedIn();
         allow create: if isSignedIn() && isEmailVerified() && isValidMessage(incoming()) &&
                       get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'active';
+      }
+
+      match /presence/{userId} {
+        allow read, list: if isSignedIn();
+        allow create, update: if isSignedIn() && isOwner(userId) && 
+                     incoming().status in ['active', 'away'] &&
+                     incoming().lastActive is string &&
+                     incoming().isTyping is bool;
+        allow delete: if isSignedIn() && isOwner(userId);
+      }
+
+      match /resources/{resourceId} {
+        function isValidResource(data) {
+          return data.title is string && data.title.size() <= 100 &&
+                 data.url is string && data.url.size() <= 500 &&
+                 data.addedBy == request.auth.uid;
+        }
+
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isEmailVerified() && isValidResource(incoming());
+        allow delete: if isSignedIn() && (resource.data.addedBy == request.auth.uid || get(/databases/$(database)/documents/rooms/$(roomId)).data.creatorId == request.auth.uid);
+      }
+
+      match /notes/{noteId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() && isEmailVerified();
+        allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || get(/databases/$(database)/documents/rooms/$(roomId)).data.creatorId == request.auth.uid);
+      }
+    }
+
+    // --- Direct Messaging ---
+    match /conversations/{conversationId} {
+      function isConversationParticipant(data) {
+        return request.auth.uid in data.participants;
+      }
+
+      allow list: if isSignedIn() && isConversationParticipant(resource.data);
+      allow get: if isSignedIn() && isConversationParticipant(resource.data);
+      allow create: if isSignedIn() && isEmailVerified() && 
+                    isConversationParticipant(incoming()) && 
+                    incoming().participants.size() == 2;
+      allow update: if isSignedIn() && isConversationParticipant(existing()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+
+      match /messages/{messageId} {
+        allow read, list: if isSignedIn() && 
+                          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if isSignedIn() && isEmailVerified() &&
+                      request.auth.uid == incoming().senderId &&
+                      request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
       }
     }
   }
